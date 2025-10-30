@@ -10,7 +10,7 @@ class Server
 
   PORT = 8080
   SERVER = "localhost"
-  ADDR = ( SERVER, PORT )
+  ADDR = ( SERVER, PORT=8080 )
   FORMAT = "utf-8"
   DISCONNECT_MESSAGE = "DISCONNECT!"
 

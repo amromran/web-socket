@@ -3,8 +3,11 @@
 # require 'thread'
 require 'socket'
 require 'set'
+require 'thread'
 
 class Server
+  attr_reader :server, :clients, :clients_lock
+
   PORT = 8080
   SERVER = "localhost"
   ADDR = ( SERVER, PORT )

@@ -1,6 +1,3 @@
-# frozen_string_literal: true
-
-# require 'thread'
 require 'socket'
 require 'set'
 require 'thread'
@@ -9,70 +6,57 @@ class Server
   attr_reader :server, :clients, :clients_lock
 
   PORT = 8080
-  SERVER = "localhost"
-  ADDR = ( SERVER, PORT=8080 )
-  FORMAT = "utf-8"
-  DISCONNECT_MESSAGE = "DISCONNECT!"
+  SERVER = 'localhost'
+  DISCONNECT_MESSAGE = "DISCONNECT"
 
-  server = TCPServer.new( SERVER, PORT )
-  server.bind( ADDR )
-  server.listen( 10 )
-
-  clients = Set.new
-  client_lock = Mutex.new
-
-  def with_lock( lock )
-    lock.synchronize
+  def initialize( host = SERVER, port = PORT )
+    @server = TCPServer.new(host, port)
+    @clients = Set.new
+    @clients_lock = Mutex.new
   end
 
-  def client( conn, addr, clients, client_lock )
-    puts "#{addr} Connected"
+  def with_lock( lock )
+    lock.synchronize { yield }
+  end
+
+  def client( conn, addr )
+    puts "#{addr} connected"
     begin
-      connected = true
+      loop do
+        msg = conn.gets&.chomp
+        break if msg.nil? || msg == DISCONNECT_MESSAGE
 
-      while connected
-        data_bytes = conn.gets&.chomp
-        break if data_bytes.nil?
+        puts "#{addr}: #{msg}"
 
-        msg = data_bytes.force_encoding( "UTF-8" )
-
-        if msg == DISCONNECT_MESSAGE
-          connected = false
-          next
-        end
-
-        puts "#{addr} #{msg}"
-
-        with_connection( clients_lock ) do
-          clients.each do |client_conn|
-            client_conn.write("#{addr} #{msg}")
+        # Broadcast to all connected clients
+        with_lock( @clients_lock ) do
+          @clients.each do |client_conn|
+            next if client_conn == conn
+            client_conn.puts("#{addr}: #{msg}")
           end
         end
       end
-
     rescue => e
       puts "Error with #{addr}: #{e.message}"
-      with_lock( clients_lock ) do
-        clients.delete( conn )
-      end
     ensure
+      with_lock(@clients_lock) { @clients.delete(conn) }
       conn.close
+      puts "#{addr} disconnected"
     end
   end
 
-  def start( server, clients, clients_lock )
-    puts "Server started"
+  def start
+    puts "Server started on #{@server.addr[2]}:#{@server.addr[1]}"
     loop do
-      conn = server.accept
+      conn = @server.accept
       addr = conn.peeraddr[2] rescue "unknown"
-      with_lock( clients_lock ) { clients << conn }
+      with_lock( @clients_lock ) { @clients << conn }
 
       Thread.new do
-        client( conn, addr, clients, clients_lock )
+        client(conn, addr)
       end
     end
   end
-
-  start( server, clients, clients_lock )
-
 end
+
+Server.new.start
